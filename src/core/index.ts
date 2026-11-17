@@ -7,4 +7,6 @@ export * from './errors.ts';
 export * from './keychain.ts';
 export * from './fallback.ts';
 export * from './token.ts';
+export * from './client.ts';
 export * from './profile.ts';
+

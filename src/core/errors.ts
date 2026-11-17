@@ -66,3 +66,63 @@ export class ProfileNotFoundError extends AgySwitcherError {
     this.alias = alias;
   }
 }
+
+export class AuthTokenExpiredError extends AgySwitcherError {
+  public readonly httpStatus = 401;
+
+  constructor(message = 'Access token expired or unauthorized') {
+    super(message);
+  }
+}
+
+export class SubscriptionRequiredError extends AgySwitcherError {
+  public readonly httpStatus = 403;
+  public readonly reason: string;
+  public readonly project?: string;
+
+  constructor(message: string, project?: string, reason = 'SUBSCRIPTION_REQUIRED') {
+    super(message);
+    this.project = project;
+    this.reason = reason;
+  }
+}
+
+export class RateLimitExceededError extends AgySwitcherError {
+  public readonly httpStatus = 429;
+  public readonly retryAfterSeconds?: number;
+
+  constructor(message: string, retryAfterSeconds?: number) {
+    super(message);
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+export class ServiceUnavailableError extends AgySwitcherError {
+  public readonly httpStatus: number;
+
+  constructor(message: string, httpStatus = 503) {
+    super(message);
+    this.httpStatus = httpStatus;
+  }
+}
+
+export class NetworkOfflineError extends AgySwitcherError {
+  public readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.cause = cause;
+  }
+}
+
+export class CloudCodeApiError extends AgySwitcherError {
+  public readonly httpStatus: number;
+  public readonly responseBody?: unknown;
+
+  constructor(message: string, httpStatus: number, responseBody?: unknown) {
+    super(message);
+    this.httpStatus = httpStatus;
+    this.responseBody = responseBody;
+  }
+}
+
