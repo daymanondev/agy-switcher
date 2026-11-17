@@ -1,5 +1,6 @@
-import { describe, it } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { resetOAuthClientCache } from '../../src/core/token.ts';
 import { CloudCodeClient, fetchAccountQuota } from '../../src/core/client.ts';
 import {
   AuthTokenExpiredError,
@@ -11,6 +12,23 @@ import {
 import type { OAuthToken } from '../../src/core/types.ts';
 
 describe('CloudCodeClient (Unit Tests)', () => {
+  const prevClientId = process.env.AGY_OAUTH_CLIENT_ID;
+  const prevClientSecret = process.env.AGY_OAUTH_CLIENT_SECRET;
+
+  beforeEach(() => {
+    resetOAuthClientCache();
+    process.env.AGY_OAUTH_CLIENT_ID = 'test-client-id';
+    process.env.AGY_OAUTH_CLIENT_SECRET = 'test-client-secret';
+  });
+
+  afterEach(() => {
+    resetOAuthClientCache();
+    if (prevClientId !== undefined) process.env.AGY_OAUTH_CLIENT_ID = prevClientId;
+    else delete process.env.AGY_OAUTH_CLIENT_ID;
+    if (prevClientSecret !== undefined) process.env.AGY_OAUTH_CLIENT_SECRET = prevClientSecret;
+    else delete process.env.AGY_OAUTH_CLIENT_SECRET;
+  });
+
   const dummyToken: OAuthToken = {
     access_token: 'ya29.initial-access-token',
     token_type: 'Bearer',

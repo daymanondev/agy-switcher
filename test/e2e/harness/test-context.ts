@@ -26,6 +26,8 @@ export async function createTestContext(): Promise<TestContext> {
     AGY_MOCK_KEYCHAIN_DB: process.env.AGY_MOCK_KEYCHAIN_DB,
     AGY_API_BASE_URL: process.env.AGY_API_BASE_URL,
     AGY_TOKEN_URL: process.env.AGY_TOKEN_URL,
+    AGY_OAUTH_CLIENT_ID: process.env.AGY_OAUTH_CLIENT_ID,
+    AGY_OAUTH_CLIENT_SECRET: process.env.AGY_OAUTH_CLIENT_SECRET,
   };
 
   process.env.HOME = fs.getHomeDir();
@@ -33,6 +35,8 @@ export async function createTestContext(): Promise<TestContext> {
   process.env.AGY_MOCK_KEYCHAIN_DB = keychain.getDbPath();
   process.env.AGY_API_BASE_URL = serverUrl;
   process.env.AGY_TOKEN_URL = `${serverUrl}/token`;
+  process.env.AGY_OAUTH_CLIENT_ID = 'test-oauth-client-id';
+  process.env.AGY_OAUTH_CLIENT_SECRET = 'test-oauth-client-secret';
   process.env.PATH = `${keychain.getBinDir()}:${process.env.PATH || ''}`;
 
   return {
@@ -68,6 +72,12 @@ export async function createTestContext(): Promise<TestContext> {
 
       if (origEnv.AGY_TOKEN_URL !== undefined) process.env.AGY_TOKEN_URL = origEnv.AGY_TOKEN_URL;
       else delete process.env.AGY_TOKEN_URL;
+
+      if (origEnv.AGY_OAUTH_CLIENT_ID !== undefined) process.env.AGY_OAUTH_CLIENT_ID = origEnv.AGY_OAUTH_CLIENT_ID;
+      else delete process.env.AGY_OAUTH_CLIENT_ID;
+
+      if (origEnv.AGY_OAUTH_CLIENT_SECRET !== undefined) process.env.AGY_OAUTH_CLIENT_SECRET = origEnv.AGY_OAUTH_CLIENT_SECRET;
+      else delete process.env.AGY_OAUTH_CLIENT_SECRET;
     },
   };
 }

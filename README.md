@@ -41,6 +41,11 @@ agy-switcher save pro2
 
 From then on, switch anytime without `/logout` or re-authenticating in the browser.
 
+### Zero Credentials Stored in Repo
+
+- Saved user accounts (`refresh_token`, `access_token`, emails) live exclusively in **macOS Keychain** (`gemini:antigravity-profile:<alias>`) and `~/.gemini/jetski-standalone-oauth-token` (`0600`).
+- OAuth app credentials needed for in-memory token refresh are **never hardcoded** in the repository: on any machine with `agy` installed, `agy-switcher` auto-discovers them from the local `agy` binary and caches the verified pair outside the repo at `~/.config/agy-switcher/oauth.json` (`0600`). You can also override via `AGY_OAUTH_CLIENT_ID` / `AGY_OAUTH_CLIENT_SECRET` or `AGY_BIN`.
+
 ---
 
 ## CLI Usage

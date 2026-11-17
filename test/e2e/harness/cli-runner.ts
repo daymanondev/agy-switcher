@@ -44,6 +44,8 @@ export class CliRunner {
       AGY_MOCK_KEYCHAIN_DB: this.mockKeychain.getDbPath(),
       AGY_API_BASE_URL: this.mockServer.getBaseUrl(),
       AGY_TOKEN_URL: `${this.mockServer.getBaseUrl()}/token`,
+      AGY_OAUTH_CLIENT_ID: 'test-oauth-client-id',
+      AGY_OAUTH_CLIENT_SECRET: 'test-oauth-client-secret',
       PATH: `${this.mockKeychain.getBinDir()}:${process.env.PATH || ''}`,
       ...(options?.env || {}),
     };
