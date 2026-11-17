@@ -2,6 +2,8 @@ import type {
   AntigravityPayload,
   AntigravityProfile,
   ProfileSummary,
+  UnifiedQuotaSummary,
+  ProfileWithQuota,
 } from './types.ts';
 import { AgySwitcherError, ProfileNotFoundError } from './errors.ts';
 import {
@@ -17,7 +19,12 @@ import {
 import {
   isTokenExpired,
   getTokenExpiresInSeconds,
+  ensureFreshPayload,
 } from './token.ts';
+import { CloudCodeClient } from './client.ts';
+import { normalizeQuotaData } from './quota.ts';
+import { findBestProfile } from './scorer.ts';
+
 
 export const KEYCHAIN_SERVICE = 'gemini';
 export const PRIMARY_ACCOUNT = 'antigravity';
@@ -261,6 +268,199 @@ export class ProfileService {
     const account = `${PROFILE_ACCOUNT_PREFIX}${cleanAlias}`;
     return this.keychain.deleteGenericPassword(KEYCHAIN_SERVICE, account);
   }
+
+  /**
+   * Fetches and normalizes quota data for a specific profile alias.
+   * Proactively refreshes expired token in Keychain if needed.
+   */
+  async getProfileQuota(alias: string, client?: CloudCodeClient): Promise<UnifiedQuotaSummary> {
+    const cleanAlias = this.validateAlias(alias);
+    const account = `${PROFILE_ACCOUNT_PREFIX}${cleanAlias}`;
+    const secret = await this.keychain.findGenericPassword(KEYCHAIN_SERVICE, account);
+
+    if (!secret) {
+      throw new ProfileNotFoundError(cleanAlias);
+    }
+
+    let payload = parseKeyringPayload(secret);
+
+    // Proactively check and refresh token in Keychain if expired
+    try {
+      const { payload: freshPayload, refreshed } = await ensureFreshPayload(payload, 60);
+      if (refreshed) {
+        payload = freshPayload;
+        await this.keychain.addGenericPassword(
+          KEYCHAIN_SERVICE,
+          account,
+          encodeKeyringPayload(payload),
+          true
+        );
+        const active = await this.getActiveProfile();
+        if (active && this.isPayloadMatching(active.payload, payload)) {
+          await this.keychain.addGenericPassword(
+            KEYCHAIN_SERVICE,
+            PRIMARY_ACCOUNT,
+            encodeKeyringPayload(payload),
+            true
+          );
+          await syncFallbackFile(payload, this.fallbackPath);
+        }
+      }
+    } catch {
+      // If token refresh fails, proceed with existing token; client will handle downstream 401
+    }
+
+    const cloudClient =
+      client ??
+      new CloudCodeClient({
+        token: payload.token,
+        onTokenRefresh: async (newToken) => {
+          payload.token = newToken;
+          await this.keychain.addGenericPassword(
+            KEYCHAIN_SERVICE,
+            account,
+            encodeKeyringPayload(payload),
+            true
+          );
+          const active = await this.getActiveProfile();
+          if (active && this.isPayloadMatching(active.payload, payload)) {
+            await this.keychain.addGenericPassword(
+              KEYCHAIN_SERVICE,
+              PRIMARY_ACCOUNT,
+              encodeKeyringPayload(payload),
+              true
+            );
+            await syncFallbackFile(payload, this.fallbackPath);
+          }
+        },
+      });
+
+    if (client) {
+      cloudClient.setToken(payload.token);
+    }
+
+    const loadResp = await cloudClient.loadCodeAssist();
+    const project = loadResp.cloudaicompanionProject;
+
+    let summaryResp = null;
+    let quotaResp = null;
+
+    if (project && typeof project === 'string' && project.trim() !== '') {
+      [summaryResp, quotaResp] = await Promise.all([
+        cloudClient.retrieveUserQuotaSummary(project).catch(() => null),
+        cloudClient.retrieveUserQuota(project).catch(() => null),
+      ]);
+    }
+
+    return normalizeQuotaData(
+      payload.id_token_email || cleanAlias,
+      loadResp,
+      summaryResp,
+      quotaResp
+    );
+  }
+
+  /**
+   * Lists all stored profile accounts enriched with their quota information.
+   */
+  async listProfilesWithQuota(options?: {
+    client?: CloudCodeClient;
+  }): Promise<Array<ProfileSummary & { quota?: UnifiedQuotaSummary }>> {
+    const summaries = await this.listProfiles();
+    const enriched: Array<ProfileSummary & { quota?: UnifiedQuotaSummary }> = [];
+
+    for (const s of summaries) {
+      try {
+        const quota = await this.getProfileQuota(s.alias, options?.client);
+        enriched.push({
+          ...s,
+          tier: quota.tierDisplayName,
+          quota,
+        });
+      } catch {
+        enriched.push({
+          ...s,
+          quota: undefined,
+        });
+      }
+    }
+
+    return enriched;
+  }
+
+  /**
+   * Evaluates all stored profiles and determines the best profile based on available quota.
+   */
+  async getBestProfile(
+    client?: CloudCodeClient
+  ): Promise<{ profile: AntigravityProfile; quota: UnifiedQuotaSummary } | null> {
+    const summariesWithQuota = await this.listProfilesWithQuota({ client });
+    if (summariesWithQuota.length === 0) {
+      return null;
+    }
+
+    const scorableList: ProfileWithQuota[] = summariesWithQuota.map((s) => ({
+      alias: s.alias,
+      email: s.email,
+      isActive: s.isActive,
+      quota: s.quota,
+    }));
+
+    const bestCandidate = findBestProfile(scorableList);
+    if (!bestCandidate || !bestCandidate.quota) {
+      return null;
+    }
+
+    const account = `${PROFILE_ACCOUNT_PREFIX}${bestCandidate.alias}`;
+    const secret = await this.keychain.findGenericPassword(KEYCHAIN_SERVICE, account);
+    if (!secret) {
+      return null;
+    }
+
+    const payload = parseKeyringPayload(secret);
+    const profile: AntigravityProfile = {
+      alias: bestCandidate.alias,
+      email: payload.id_token_email,
+      authMethod: payload.auth_method,
+      isActive: bestCandidate.isActive,
+      payload,
+      updatedAt: new Date().toISOString(),
+    };
+
+    return {
+      profile,
+      quota: bestCandidate.quota,
+    };
+  }
+
+  /**
+   * Automatically selects and switches to the best profile with the highest composite quota score.
+   */
+  async useBestProfile(
+    client?: CloudCodeClient
+  ): Promise<{ profile: AntigravityProfile; previousAlias?: string; quota: UnifiedQuotaSummary }> {
+    const activeProfile = await this.getActiveProfile();
+    let previousAlias: string | undefined;
+
+    if (activeProfile) {
+      const summaries = await this.listProfiles();
+      const matching = summaries.find((s) => s.isActive);
+      previousAlias = matching?.alias;
+    }
+
+    const best = await this.getBestProfile(client);
+    if (!best) {
+      throw new AgySwitcherError('No profiles available to select');
+    }
+
+    const switchedProfile = await this.useProfile(best.profile.alias);
+    return {
+      profile: switchedProfile,
+      previousAlias,
+      quota: best.quota,
+    };
+  }
+
 
   /**
    * Validates alias naming rules.
