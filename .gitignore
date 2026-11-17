@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+coverage/
+
+# Temporary and local files
+*.tmp.*
+.DS_Store
+.env
+*.log

@@ -1,0 +1,22 @@
+{
+  "name": "agy-switcher",
+  "version": "0.1.0",
+  "description": "macOS Antigravity profile switcher and Google Cloud Code Assist quota tracker for CLI and Paseo Desktop",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./core": "./src/core/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.8.0"
+  }
+}
