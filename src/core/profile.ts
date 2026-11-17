@@ -285,27 +285,11 @@ export class ProfileService {
 
     let payload = parseKeyringPayload(secret);
 
-    // Proactively check and refresh token in Keychain if expired
+    // Proactively refresh expired access token in memory only (never mutate Keychain on read)
     try {
       const { payload: freshPayload, refreshed } = await ensureFreshPayload(payload, 60);
       if (refreshed) {
         payload = freshPayload;
-        await this.keychain.addGenericPassword(
-          KEYCHAIN_SERVICE,
-          account,
-          encodeKeyringPayload(payload),
-          true
-        );
-        const active = await this.getActiveProfile();
-        if (active && this.isPayloadMatching(active.payload, payload)) {
-          await this.keychain.addGenericPassword(
-            KEYCHAIN_SERVICE,
-            PRIMARY_ACCOUNT,
-            encodeKeyringPayload(payload),
-            true
-          );
-          await syncFallbackFile(payload, this.fallbackPath);
-        }
       }
     } catch {
       // If token refresh fails, proceed with existing token; client will handle downstream 401
@@ -315,24 +299,8 @@ export class ProfileService {
       client ??
       new CloudCodeClient({
         token: payload.token,
-        onTokenRefresh: async (newToken) => {
-          payload.token = newToken;
-          await this.keychain.addGenericPassword(
-            KEYCHAIN_SERVICE,
-            account,
-            encodeKeyringPayload(payload),
-            true
-          );
-          const active = await this.getActiveProfile();
-          if (active && this.isPayloadMatching(active.payload, payload)) {
-            await this.keychain.addGenericPassword(
-              KEYCHAIN_SERVICE,
-              PRIMARY_ACCOUNT,
-              encodeKeyringPayload(payload),
-              true
-            );
-            await syncFallbackFile(payload, this.fallbackPath);
-          }
+        onTokenRefresh: (newToken) => {
+          payload = { ...payload, token: newToken };
         },
       });
 

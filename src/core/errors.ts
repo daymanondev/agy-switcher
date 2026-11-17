@@ -62,7 +62,7 @@ export class ProfileNotFoundError extends AgySwitcherError {
   public readonly alias: string;
 
   constructor(alias: string) {
-    super(`Profile "${alias}" not found in Keychain`);
+    super(`Profile '${alias}' not found in Keychain`);
     this.alias = alias;
   }
 }
