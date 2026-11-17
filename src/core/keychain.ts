@@ -157,7 +157,7 @@ export class MacKeychainService implements IKeychainService {
   private readonly execFileFn: ExecFileFunction;
 
   constructor(options?: { securityBin?: string; execFileFn?: ExecFileFunction }) {
-    this.securityBin = options?.securityBin ?? '/usr/bin/security';
+    this.securityBin = options?.securityBin ?? process.env.AGY_SECURITY_BIN ?? '/usr/bin/security';
     this.execFileFn = options?.execFileFn ?? defaultExecFile;
   }
 

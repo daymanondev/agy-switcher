@@ -4,18 +4,18 @@ import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 import type { AntigravityPayload } from './types.ts';
 
-export const DEFAULT_FALLBACK_FILE_PATH = path.join(
-  os.homedir(),
-  '.gemini',
-  'jetski-standalone-oauth-token'
-);
+export function getDefaultFallbackFilePath(): string {
+  return path.join(os.homedir(), '.gemini', 'jetski-standalone-oauth-token');
+}
+
+export const DEFAULT_FALLBACK_FILE_PATH = getDefaultFallbackFilePath();
 
 /**
  * Atomically writes unprefixed plain JSON to the fallback token file with 0o600 permissions.
  */
 export async function syncFallbackFile(
   payload: AntigravityPayload,
-  targetPath = DEFAULT_FALLBACK_FILE_PATH
+  targetPath = getDefaultFallbackFilePath()
 ): Promise<void> {
   const dir = path.dirname(targetPath);
   await fs.mkdir(dir, { recursive: true });
@@ -48,7 +48,7 @@ export async function syncFallbackFile(
  * Safely removes fallback token file if it exists.
  */
 export async function removeFallbackFile(
-  targetPath = DEFAULT_FALLBACK_FILE_PATH
+  targetPath = getDefaultFallbackFilePath()
 ): Promise<void> {
   try {
     await fs.unlink(targetPath);

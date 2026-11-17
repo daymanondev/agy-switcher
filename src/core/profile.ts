@@ -14,6 +14,7 @@ import {
 } from './keychain.ts';
 import {
   DEFAULT_FALLBACK_FILE_PATH,
+  getDefaultFallbackFilePath,
   syncFallbackFile,
 } from './fallback.ts';
 import {
@@ -41,7 +42,7 @@ export class ProfileService {
 
   constructor(options?: ProfileServiceOptions) {
     this.keychain = options?.keychain ?? new MacKeychainService();
-    this.fallbackPath = options?.fallbackPath ?? DEFAULT_FALLBACK_FILE_PATH;
+    this.fallbackPath = options?.fallbackPath ?? getDefaultFallbackFilePath() ?? DEFAULT_FALLBACK_FILE_PATH;
   }
 
   /**
