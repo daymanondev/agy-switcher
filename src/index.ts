@@ -3,3 +3,4 @@
  */
 
 export * from './core/index.ts';
+export * from './cli/index.ts';
