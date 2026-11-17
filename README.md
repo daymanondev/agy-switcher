@@ -1,90 +1,182 @@
 # agy-switcher
 
-macOS account switcher and quota tracker for **Antigravity CLI (`agy`)** and **Paseo Desktop**.
+Fast, Keychain-backed account switcher and multi-window quota monitor for **Google Antigravity CLI (`agy`)** and **Paseo Desktop** on macOS.
 
-`agy-switcher` stores multiple Google OAuth sessions safely inside the **macOS Keychain** (`service="gemini"`, `account="antigravity-profile:<alias>"`), switches the active slot (`gemini:antigravity`) atomically with `~/.gemini/jetski-standalone-oauth-token`, and queries Google Cloud Code Assist internal endpoints for **Tier**, **Gemini 5h**, **Claude/GPT 5h**, and **Claude/GPT Weekly** quotas + reset times.
-
----
-
-## Architecture
-
-- **`src/core/`** — Shared core library:
-  - `keychain.ts`: `/usr/bin/security` wrapper + `go-keyring-base64:<base64(JSON)>` codec
-  - `fallback.ts`: Atomic `0600` sync for `~/.gemini/jetski-standalone-oauth-token`
-  - `token.ts`: In-memory OAuth2 token refresh
-  - `client.ts`: Cloud Code Assist client (`loadCodeAssist`, `retrieveUserQuotaSummary`, `retrieveUserQuota`)
-  - `quota.ts` & `scorer.ts`: Normalizes Gemini, 5h, and Weekly buckets + scores best profile
-  - `profile.ts`: `ProfileService` (`saveProfile`, `listProfiles`, `useProfile`, `deleteProfile`, `useBestProfile`)
-- **`src/cli/` & `bin/agy-switcher.mjs`** — Terminal CLI (`agy-switcher` / `agys`)
-- **`plugin/`** — Paseo Desktop plugin (`paseo-plugin.json`, `index.server.ts`, `index.client.tsx`) built with `@getpaseo/plugin` and Hermes-compatible React Native primitives.
+Switch between multiple Google accounts in one command (or one click in Paseo) without `/logout` + browser re-authentication, while tracking **Tier**, **Gemini (5h)**, **Claude / GPT (5h)**, and **Claude / GPT (Weekly)** limits with live reset timestamps.
 
 ---
 
-## First-Time Setup (2+ Accounts)
+## Why `agy-switcher`?
 
-Requires **Node.js >= 20** (tested on Node 24) on macOS.
+`agy` stores only one active session in macOS Keychain (`service="gemini"`, `account="antigravity"`). Juggling multiple Google accounts normally forces you to `/logout` and re-authenticate through the browser every time.
+
+`agy-switcher` solves this cleanly:
+
+- **Zero plaintext refresh tokens on disk:** Saved profiles are stored inside **macOS Keychain** (`service="gemini"`, `account="antigravity-profile:<alias>"`), never inside this repository or plaintext profile files.
+- **Full 5h + Weekly visibility:** Queries Google Cloud Code Assist's internal quota endpoints (`loadCodeAssist`, `retrieveUserQuotaSummary`, `retrieveUserQuota`) in parallel—showing both the 5-hour rolling window and the 7-day weekly limit with local reset times.
+- **One shared core, two interfaces:**
+  - **CLI (`agy-switcher` / `agys`)** with interactive TTY picker and `best` auto-selection.
+  - **Paseo Desktop Plugin (`plugin/`)** with Settings, Global Screen, Workspace Panel, and Command Center integration.
+- **Zero hardcoded OAuth secrets in repo:** Auto-discovers installed-app OAuth client credentials from your local `agy` binary on first token refresh and caches them externally at `~/.config/agy-switcher/oauth.json` (`0600`).
+
+---
+
+## Requirements
+
+- **macOS** (uses `/usr/bin/security` for Keychain operations)
+- **Node.js >= 22.18** (native TypeScript execution; tested on Node 24)
+- **Antigravity CLI (`agy`)** installed locally
+- *(Optional)* **Paseo Desktop >= 0.13.0** for the Paseo plugin
+
+---
+
+## Installation
 
 ```bash
+git clone https://github.com/<your-username>/agy-switcher.git
+cd agy-switcher
 npm install
-npm link   # exposes `agy-switcher` and `agys` globally
+npm link
 ```
 
-Save your existing accounts once:
+This exposes both `agy-switcher` and the short alias `agys` on your `PATH`.
+
+---
+
+## Quick Start
+
+Save each Google account **once**:
 
 ```bash
-# 1. With Account 1 already logged into `agy`:
+# 1. With your first Google account already signed into `agy`:
 agy-switcher save pro1
 
-# 2. Inside `agy`, run /logout, then log in as Account 2 via browser:
+# 2. Inside `agy`, run /logout, sign into your second account via browser, then:
 agy-switcher save pro2
 ```
 
-From then on, switch anytime without `/logout` or re-authenticating in the browser.
+After onboarding, you never need `/logout` to switch between saved accounts:
 
-### Zero Credentials Stored in Repo
-
-- Saved user accounts (`refresh_token`, `access_token`, emails) live exclusively in **macOS Keychain** (`gemini:antigravity-profile:<alias>`) and `~/.gemini/jetski-standalone-oauth-token` (`0600`).
-- OAuth app credentials needed for in-memory token refresh are **never hardcoded** in the repository: on any machine with `agy` installed, `agy-switcher` auto-discovers them from the local `agy` binary and caches the verified pair outside the repo at `~/.config/agy-switcher/oauth.json` (`0600`). You can also override via `AGY_OAUTH_CLIENT_ID` / `AGY_OAUTH_CLIENT_SECRET` or `AGY_BIN`.
+```bash
+agy-switcher ls       # Inspect all accounts, tiers, 5h & weekly quotas, and reset times
+agy-switcher use pro2 # Switch active Keychain session & sync fallback file
+agy-switcher best     # Automatically switch to the account with the highest available quota
+agy-switcher          # Launch interactive TTY picker
+```
 
 ---
 
-## CLI Usage
+## CLI Reference
 
-```bash
-agy-switcher                 # Interactive TTY picker (↑/↓, Enter, b = best, q = quit)
-agy-switcher ls              # List profiles with Tier, Gemini, 5h & Weekly quotas + reset time
-agy-switcher ls --json       # Machine-readable JSON output
-agy-switcher ls --no-quota   # List Keychain profiles without network requests
-agy-switcher use pro2        # Switch active Keychain slot & sync fallback file
-agy-switcher best            # Switch to the profile with the highest remaining quota
-agy-switcher best --dry-run  # Preview the best profile without switching
-agy-switcher status          # Show currently active session and live quota
-agy-switcher save pro1 -f    # Overwrite an existing alias
-agy-switcher rm pro1         # Remove a saved profile from Keychain
+| Command | Description |
+| --- | --- |
+| `agy-switcher` *(TTY)* | Open interactive picker (`↑/↓` or `j/k` move, `Enter` switch, `b` switch best, `q` quit) |
+| `agy-switcher save <alias> [--force\|-f]` | Snapshot the active Keychain session under `<alias>` |
+| `agy-switcher ls [--json] [--no-quota]` | List saved profiles with tier, Gemini, Claude/GPT 5h & Weekly quotas + reset times |
+| `agy-switcher use <alias>` | Switch active Keychain slot (`gemini:antigravity`) and sync `~/.gemini/jetski-standalone-oauth-token` (`0600`) |
+| `agy-switcher best [--dry-run]` | Score all profiles and switch to the one with the highest usable quota |
+| `agy-switcher status [--json] [--no-quota]` | Show the currently active email, matched alias, and live quota breakdown |
+| `agy-switcher rm <alias>` | Delete a saved profile from Keychain |
+| `agy-switcher -h \| --help` | Show CLI help |
+| `agy-switcher -v \| --version` | Show CLI version |
+
+### Example `ls` Output
+
+```text
+ALIAS        EMAIL                    TIER            GEMINI               5H QUOTA             WEEKLY                    STATUS
+----------------------------------------------------------------------------------------------------------------------------------
+pro1         nick1@gmail.com          g1-pro-tier     [████░] 88% (3h 20m) [█████] 100% (ready) [███░░] 69% (6d 1h · 22/11 15:26) * active
+pro2         nick2@gmail.com          g1-pro-tier     [█████] 100% (ready) [█████] 100% (ready) [█████] 100% (ready)          ready
 ```
 
-> **Note:** Switching updates `gemini:antigravity` in macOS Keychain for new `agy` sessions and newly spawned Paseo agents. Already-running agent processes retain their in-memory tokens until restarted.
+### Best-Account Scoring
+
+`best` ranks profiles using a composite score `[0..105]`:
+
+- **Weights:** `50%` Claude/GPT 5h remaining + `30%` Claude/GPT Weekly remaining + `20%` Gemini remaining + `+5` paid-tier bonus.
+- **Hard bottleneck gate:** Any profile with `< 5%` remaining in its 5-hour window is multiplied by `0.10x` to force failover away from nearly exhausted accounts.
+- **Tie-breaking:** Profiles within `2.0` points break ties by earliest bottleneck reset time, then currently active profile.
 
 ---
 
 ## Paseo Desktop Plugin
 
-The self-contained Paseo plugin lives under `plugin/`:
+The `plugin/` directory is a self-contained Paseo plugin (`>= 0.13.0`) built with `@getpaseo/plugin` and Hermes-compatible React Native primitives:
 
-- **Settings Screen & Global Screen (`Antigravity Accounts`)**: view all saved profiles with Gemini 5h, Claude/GPT 5h, and Claude/GPT Weekly progress bars + local reset timestamps, save the current active session, remove profiles, or switch with 1 click.
-- **Workspace Panel (`Antigravity`)**: quick access inside workspace/explorer panes.
-- **Command Center**:
+- **Settings Screen & Global Screen (`Antigravity Accounts`):** View all profiles with progress bars for Gemini (5h), Claude/GPT (5h), and Claude/GPT (Weekly) + local reset timestamps, save the current active session, remove profiles, or switch with 1 click.
+- **Workspace Panel (`Antigravity`):** Quick switcher available in `workspace` and `explorer` locations.
+- **Command Center Actions:**
   - `Antigravity: Open Account Switcher`
   - `Antigravity: Switch to Best Quota Account`
 
-Install into Paseo Desktop from a clean git commit/tag (never hot-patch directly into `~/.paseo/plugins/`).
+### Installing in Paseo
+
+Install directly via Paseo's plugin manager pointing to your Git repository URL (or a release tag). Do not manually copy or hot-patch files into `~/.paseo/plugins/` while Paseo is running.
+
+> **Session behavior:** Terminal `agy` and Paseo Desktop (`provider: "antigravity"`) share the same Keychain slot `gemini:antigravity`. Switching applies immediately to new `agy` sessions and newly spawned Paseo agents; already-running agent processes retain their in-memory tokens until restarted.
 
 ---
 
-## Development & Verification
+## How It Works & Security Model
+
+1. **Keychain Storage:** Uses macOS `/usr/bin/security` with `go-keyring-base64:<base64(JSON)>` payloads:
+   - Active slot: `service="gemini"`, `account="antigravity"`
+   - Saved slots: `service="gemini"`, `account="antigravity-profile:<alias>"`
+2. **Fallback Sync:** Switching atomically writes `~/.gemini/jetski-standalone-oauth-token` via temp-file + `chmod 0600` + `rename` so `agy` fallback reads stay aligned.
+3. **In-Memory Token Refresh:** When checking quotas for inactive profiles, expired `access_token`s are refreshed in memory without overwriting the active Keychain slot or modifying saved profile entries.
+4. **OAuth Client Discovery:** No OAuth `client_secret` or personal credentials are stored in this repository. Credentials are resolved in order:
+   1. `AGY_OAUTH_CLIENT_ID` & `AGY_OAUTH_CLIENT_SECRET` env vars
+   2. `~/.config/agy-switcher/oauth.json` (`0600`, outside the repo)
+   3. Auto-extraction from the locally installed `agy` binary (`AGY_BIN` or `PATH` / `~/.local/bin/agy`)
+
+### Environment Variables
+
+| Variable | Purpose |
+| --- | --- |
+| `AGY_BIN` | Override path to the `agy` binary for OAuth client discovery |
+| `AGY_OAUTH_CLIENT_ID` | Override Google OAuth client ID |
+| `AGY_OAUTH_CLIENT_SECRET` | Override Google OAuth client secret |
+| `AGY_SECURITY_BIN` | Override `/usr/bin/security` path (useful in tests) |
+| `AGY_API_BASE_URL` | Override Cloud Code Assist base URL (default `https://daily-cloudcode-pa.googleapis.com`) |
+| `AGY_TOKEN_URL` | Override Google OAuth2 token endpoint (default `https://oauth2.googleapis.com/token`) |
+
+---
+
+## Project Structure & Development
+
+```text
+agy-switcher/
+├── bin/agy-switcher.mjs      # CLI executable entrypoint
+├── src/
+│   ├── core/                 # Keychain, fallback sync, OAuth refresh, Cloud Code client, quota normalizer, scorer
+│   └── cli/                  # CLI parser, commands, quota table formatter, TTY picker
+├── plugin/                   # Self-contained Paseo Desktop plugin
+│   ├── paseo-plugin.json
+│   ├── index.server.ts
+│   ├── index.client.tsx
+│   ├── shared/rpc.ts
+│   ├── server/               # RPC handlers + synced core (`plugin/server/core/`)
+│   └── client/               # Hermes-compatible React Native UI
+├── scripts/
+│   ├── sync-plugin-core.mjs  # Syncs src/core/ -> plugin/server/core/
+│   └── check-bundle.mjs      # Verifies esbuild Hermes client + CJS server VM evaluation
+└── test/                     # Unit tests (core, cli, plugin) + 4-tier hermetic E2E suite
+```
+
+### Verification Commands
 
 ```bash
-npm run sync:plugin-core   # Sync src/core/ -> plugin/server/core/
-npm run check              # Sync check + tsc --noEmit + Hermes/CJS bundle check + all tests
-node test/run-e2e.mjs      # Run the 4-tier hermetic E2E matrix
+npm run sync:plugin-core        # Sync src/core/ into plugin/server/core/
+npm run sync:plugin-core:check  # Verify zero drift between src/core/ and plugin/server/core/
+npm run typecheck               # Run tsc --noEmit
+npm run check:bundle            # Build & validate Hermes client + CJS server bundles from git-tracked files
+npm test                        # Run all unit, plugin, and 4-tier E2E tests (mocked Keychain & API)
+npm run check                   # Run all of the above
+node test/run-e2e.mjs           # Print the 4-tier E2E summary matrix
 ```
+
+---
+
+## Disclaimer
+
+`agy-switcher` interacts with macOS Keychain and Google Cloud Code Assist internal endpoints used by the Antigravity CLI. Internal API payloads may change across Antigravity releases. This project is not affiliated with or endorsed by Google.
