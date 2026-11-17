@@ -1,7 +1,0 @@
-{
-  "id": "agy-switcher",
-  "description": "Switch Antigravity Google accounts and monitor Gemini, Claude/GPT 5h & Weekly quotas from Paseo Desktop.",
-  "requirements": {
-    "paseo": ">=0.13.0"
-  }
-}
