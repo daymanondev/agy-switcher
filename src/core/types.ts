@@ -85,7 +85,7 @@ export interface LoadCodeAssistResponse {
 
 export interface RawQuotaSummaryBucket {
   bucketId: string;
-  displayName: string;
+  displayName?: string;
   description?: string;
   window?: '5h' | 'weekly' | string;
   remainingFraction?: number;
@@ -93,6 +93,7 @@ export interface RawQuotaSummaryBucket {
   disabled?: boolean;
   resetTime?: string;
 }
+
 
 export interface RawQuotaSummaryGroup {
   displayName: string;
