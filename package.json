@@ -1,6 +1,7 @@
 {
   "name": "agy-switcher",
   "version": "0.1.0",
+  "license": "MIT",
   "description": "macOS Antigravity profile switcher and Google Cloud Code Assist quota tracker for CLI and Paseo Desktop",
   "type": "module",
   "engines": {

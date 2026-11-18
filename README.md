@@ -33,7 +33,7 @@ Switch between multiple Google accounts in one command (or one click in Paseo) w
 ## Installation
 
 ```bash
-git clone https://github.com/<your-username>/agy-switcher.git
+git clone https://github.com/daymanondev/agy-switcher.git
 cd agy-switcher
 npm install
 npm link
@@ -111,7 +111,13 @@ The `plugin/` directory is a self-contained Paseo plugin (`>= 0.13.0`) built wit
 
 ### Installing in Paseo
 
-Install directly via Paseo's plugin manager pointing to your Git repository URL (or a release tag). Do not manually copy or hot-patch files into `~/.paseo/plugins/` while Paseo is running.
+Install directly via Paseo's plugin manager using the Git repository URL:
+
+```text
+https://github.com/daymanondev/agy-switcher.git
+```
+
+Do not manually copy or hot-patch files into `~/.paseo/plugins/` while Paseo is running.
 
 > **Session behavior:** Terminal `agy` and Paseo Desktop (`provider: "antigravity"`) share the same Keychain slot `gemini:antigravity`. Switching applies immediately to new `agy` sessions and newly spawned Paseo agents; already-running agent processes retain their in-memory tokens until restarted.
 
